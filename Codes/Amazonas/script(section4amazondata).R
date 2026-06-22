@@ -723,5 +723,323 @@ univariate
 #This application assesses whether the proposed multivariate framework can pool information across geographically
 #related populations while preserving region-specific mortality dynamics.
 
+### model comparison with different discount matrix configuration
+## configuration 1
+d.rionegro<- c(rep(0.90, 3), rep(0.95,6), rep(0.999, 8))
+d.japura<- c(rep(0.90, 3), rep(0.99,5), rep(0.999, 8))
+d.manaus<-  c(rep(0.90, 3), rep(0.95,8), rep(0.999, 6))
+d.gamma<-   c(rep(0.95, 3), rep(0.99,3), rep(0.99, 11)) 
+deltaJ1<-  cbind(d.rionegro, d.japura, d.manaus,d.gamma)
+
+fit.region.all1<- dlm.multivariate(y = y.m, Ft = Ft, Gt = Gt, nit = 30000, bn = 10000, thin = 1,
+                                   v0 = v0, s0 = s0, m0 = m0, C0 = C0, delta = deltaJ1, V = V)
+
+### configuration 2
+d.gamma<-   rep(0.95, 17)
+deltaJ2<-  cbind(d.rionegro, d.japura, d.manaus,d.gamma)
+fit.region.all2<- dlm.multivariate(y = y.m, Ft = Ft, Gt = Gt, nit = 30000, bn = 10000, thin = 1,
+                                   v0 = v0, s0 = s0, m0 = m0, C0 = C0, delta = deltaJ2, V = V)
+
+### configuration 3: the best model 
+d.rionegro<- c(rep(0.90, 3), rep(0.95,6), rep(0.999, 8))
+d.japura<- c(rep(0.90, 3), rep(0.99,7), rep(0.999, 7))
+d.manaus<-  c(rep(0.90, 3), rep(0.95,8), rep(0.999, 6))
+d.gamma<-   rep(0.999, 17)
+deltaJ3<-  cbind(d.rionegro, d.japura, d.manaus,d.gamma)
+fit.region.all3<- dlm.multivariate(y = y.m, Ft = Ft, Gt = Gt, nit = 30000, bn = 10000, thin = 1,
+                                   v0 = v0, s0 = s0, m0 = m0, C0 = C0, delta = deltaJ3, V = V)
+
+###configuration 4
+d.gamma<-   c(rep(0.95, 10), rep(0.99, 7)) 
+deltaJ4<-  cbind(d.rionegro, d.japura, d.manaus,d.gamma)
+fit.region.all4<- dlm.multivariate(y = y.m, Ft = Ft, Gt = Gt, nit = 30000, bn = 10000, thin = 1,
+                                   v0 = v0, s0 = s0, m0 = m0, C0 = C0, delta = deltaJ4, V = V)
+
+ls1 <- log_pred_density(y.m, fit.region.all1$mu, fit.region.all1$V)
+ls2 <- log_pred_density(y.m, fit.region.all2$mu, fit.region.all2$V)
+ls3 <- log_pred_density(y.m, fit.region.all3$mu, fit.region.all3$V)
+ls4 <- log_pred_density(y.m, fit.region.all4$mu, fit.region.all4$V)
+
+data.frame(
+  model = c("prop 1",
+            "prop 2",
+            "prop 3",
+            "prop 4"),
+  logscore = c(ls1, ls2, ls3,ls4)
+)
 
 
+### conditional on best discount matrix configuration 3:
+fit.region.all<- fit.region.all3
+qxaux <- qx_fitted(fit.region.all)
+
+qx_list <- setNames(
+  lapply(qxaux, function(q){
+    df <- as.data.frame(q)
+    df$age <- age
+    df
+  }),
+  c("Rio Negro","Japurá","Manaus")
+)
+qx.all <- bind_rows(qx_list, .id = "regiao")
+
+
+### compute metrics
+mx.fitWithAlpha<- data.frame(qx.all$qx.fitted[qx.all$regiao=="Rio Negro"],
+                             qx.all$qx.fitted[qx.all$regiao=="Japurá"],
+                             qx.all$qx.fitted[qx.all$regiao=="Manaus"])
+mx.fit.multivariateWithAlpha<- as.data.frame(mx.fitWithAlpha)
+
+
+### Figure 7 :multivariate (second row) SSM fits with 95\% predictive intervals for Japurá,
+#Manaus and Rio Negro microregions during 2022--2024.
+#Dots represent crude mortality rates and solid lines represent fitted mortality curves.
+ ggplot(NULL, aes(x = age)) +
+  geom_point(data = mx.obs.m, aes(x = age, y = log(mx), color = regiao), size = 1.7) +
+  geom_line(data = qx.all, aes(y = log(qx.fitted), color = regiao), linewidth = 0.8) +
+  geom_ribbon(data = qx.all, aes(ymin = log(qx.lower), ymax = log(qx.upper), fill = regiao), alpha = 0.25, color = NA) +
+  scale_y_continuous(expression("log rate"),limits=c(-10,0), breaks=c(-10, -7.5, -5, -2.5,0)) +
+  scale_x_continuous("Age", breaks = seq(0, 80, by = 10)) +
+  facet_wrap(~regiao) +
+  scale_color_manual(values = c("Rio Negro" = "magenta4", "Japurá" = "darkgreen","Manaus" = "steelblue"
+  )) +
+  scale_fill_manual(values = c("Rio Negro" = "magenta4","Japurá" = "darkgreen", "Manaus" = "steelblue"
+  )) +
+  theme_classic(base_size = 20) +
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    strip.background = element_rect(colour = "black", fill = "gray87"),
+    panel.border = element_rect(color = "black", fill = NA)
+  ) 
+
+ ### Figure 8: Comparison of the fitted male mortality curves for the Manaus, Rio Negro, and Japurá micro-regions between
+ #ages 0 and 30 years during 2022--2024.
+ ggplot(subset(qx.all, age <= 30),aes(x = age, y = log(qx.fitted), color = regiao)) +
+   geom_line(linewidth = 1.2) +
+   facet_wrap(~"comparison of fitted curves - age < 30") +
+   scale_y_continuous(expression("log rate"),limits=c(-10,-2.5), breaks=c(-10, -7.5, -5, -2.5,0)) +
+   scale_x_continuous("Age",breaks = seq(0, 30, by = 5)) +
+   scale_color_manual(values = c("Rio Negro" = "magenta4", "Japurá" = "darkgreen","Manaus" = "steelblue"
+   )) +
+   theme_classic(base_size = 20) +
+   theme(
+     legend.position = c(.80, 0.2),
+     legend.title = element_blank(),
+     strip.background = element_rect(colour = "black", fill = "gray87"),
+     panel.border = element_rect(color = "black", fill = NA)
+   ) 
+ 
+ #### ### univariate modelling 
+ Gt1<-  matrix(c(1,0,1,1), 2)
+ Ft1<- matrix(c(1,0), nrow = 1)
+ d.rionegro<- c(rep(0.90, 3), rep(0.95,6), rep(0.999, 8))
+ d.japura<- c(rep(0.90, 3), rep(0.99,7), rep(0.999, 7))
+ d.manaus<-  c(rep(0.90, 3), rep(0.95,8), rep(0.999, 6))
+ d.gamma<-   rep(0.999, 17)
+ 
+ ## manaus 
+ fit.manaus<- BayesMortalityPlus::dlm(y.m[,3], Ft= Ft1, Gt= Gt1, delta =d.manaus,
+                                      prior = list(m0 = rep(0, nrow(Gt1)), C0 = diag(100, nrow(Gt1))), ages=age)
+ ## rio negro 
+ fit.rionegro<- BayesMortalityPlus::dlm(y.m[,1], Ft= Ft1, Gt= Gt1, delta =d.rionegro,
+                                        prior = list(m0 = rep(0, nrow(Gt1)), C0 = diag(100, nrow(Gt1))), ages=age)
+ ## japura
+ fit.japura<- BayesMortalityPlus::dlm(y.m[,2], Ft= Ft1, Gt= Gt1, delta =d.japura,
+                                      prior = list(m0 = rep(0, nrow(Gt1)), C0 = diag(100, nrow(Gt1))), ages=age)
+ 
+ ### fazer os graficos de comparacao...
+ qxaux1 <- fitted(fit.japura)  %>%
+   mutate(regiao = "Japurá") 
+ qxaux2 <- fitted(fit.manaus) %>%
+   mutate(regiao = "Manaus")
+ qxaux3 <- fitted(fit.rionegro) %>%
+   mutate(regiao = "Rio Negro")
+ ### para colocar no face_wrap 
+ qxaux1$local<- "Japurá (without pooling)"
+ qxaux2$local<- "Manaus (without pooling)"
+ qxaux3$local<- "Rio Negro (without pooling)"
+ 
+ qx.all.univariate <- dplyr::bind_rows(qxaux1, qxaux2, qxaux3)
+ qx.all.univariate
+ 
+ mx.obs.m$local <- paste0(mx.obs.m$regiao,
+                          " (without pooling)") 
+ 
+ ### compute metrics
+ mx.fit.univariate<- data.frame(qxaux3$qx.fitted, qxaux1$qx.fitted,qxaux2$qx.fitted)
+ mx.fit.univariate<- as.data.frame(mx.fit.univariate)
+ 
+ 
+ ### Figure 7: univariate (first row) SSM fits with 95\% predictive intervals for Japurá,
+ #Manaus and Rio Negro microregions during 2022--2024.
+ #Dots represent crude mortality rates and solid lines represent fitted mortality curves.
+ ggplot(NULL, aes(x = age)) +
+   geom_point(data = mx.obs.m, aes(x = age, y = log(mx), color = regiao), size = 1.7) +
+   geom_line(data = qx.all.univariate, aes(y = log(qx.fitted), color = regiao), linewidth = 0.8) +
+   geom_ribbon(data = qx.all.univariate, aes(ymin = log(qx.lower), ymax = log(qx.upper), fill = regiao), alpha = 0.25, color = NA) +
+   scale_y_continuous(expression("log rate"),limits=c(-10,0), breaks=c(-10, -7.5, -5, -2.5,0)) +
+   scale_x_continuous("Age", breaks = seq(0, 80, by = 10)) +
+   facet_wrap(~local) +
+   scale_color_manual(values = c("Rio Negro" = "magenta4", "Japurá" = "darkgreen","Manaus" = "steelblue"
+   )) +
+   scale_fill_manual(values = c("Rio Negro" = "magenta4","Japurá" = "darkgreen", "Manaus" = "steelblue"
+   )) +
+   theme_classic(base_size = 20) +
+   theme(
+     legend.position = "none",
+     legend.title = element_blank(),
+     strip.background = element_rect(colour = "black", fill = "gray87"),
+     panel.border = element_rect(color = "black", fill = NA)
+   ) 
+ 
+ 
+ 
+ ####### Table 3: Model comparison based on the log posterior predictive density (LPPD),
+ #the exposure-weighted mean absolute error (WMAE), and the exposure-weighted root mean squared error (WRMSE).
+ #The best-performing model is highlighted in boldface.
+ ### 
+ 
+ d.rionegro<- c(rep(0.90, 3), rep(0.95,6), rep(0.999, 8))
+ d.japura<- c(rep(0.90, 3), rep(0.99,7), rep(0.999, 7))
+ d.manaus<-  c(rep(0.90, 3), rep(0.95,8), rep(0.999, 6))
+ 
+ ### caso univariado
+ Vunivariate<- diag(3)
+ deltaJunivariate<- cbind(d.rionegro, d.japura, d.manaus)
+ J=3
+ res3 <- buildFtGt(J, alpha= FALSE)
+ Ft3 <- res3$Ft
+ Gt3 <- res3$Gt
+ m03 = rep(0, nrow(Gt3))
+ C03 = diag(100, nrow(Gt3))
+ s03 <- diag(J)*0.01  ###priori do petris vaga
+ v03 <- 5
+ 
+ fit.joint.all.univariate<- dlm.multivariate(y = y.m, Ft = Ft3, Gt = Gt3, nit = 30000, bn = 10000, thin = 1,
+                                             v0 = v03, s0 = s03, m0 = m03, C0 = C03, delta = deltaJunivariate, V = Vunivariate)
+ 
+ 
+ 
+ qxaux <- qx_fitted(fit.joint.all.univariate)
+ 
+ qx_list <- setNames(
+   lapply(qxaux, function(q){
+     df <- as.data.frame(q)
+     df$age <- age
+     df
+   }),
+   c("Rio Negro","Japurá","Manaus")
+ )
+ 
+ # Data frame final
+ qx.all <- bind_rows(qx_list, .id = "regiao")
+ qx.all
+ 
+ 
+ 
+ 
+ ### para as metricas ponderadas
+ mx.fit.univariate<- data.frame(qx.all$qx.fitted[qx.all$regiao=="Rio Negro"],
+                                qx.all$qx.fitted[qx.all$regiao=="Japurá"],
+                                qx.all$qx.fitted[qx.all$regiao=="Manaus"])
+ mx.fit.univariate<- as.data.frame(mx.fit.univariate)
+ 
+ ## multivariate modelling without common term
+ V5= cov(y.m)
+ V5
+ deltaJ5noalpha<- cbind(d.rionegro, d.japura, d.manaus)
+ J=3#
+ res4 <- buildFtGt(J, alpha= FALSE)
+ Ft4 <- res4$Ft
+ Gt4 <- res4$Gt
+ m04 = rep(0, nrow(Gt4))
+ C04 = diag(100, nrow(Gt4))
+ s04 <- diag(J)*0.01  ###priori do petris vaga
+ v04 <- 5
+ 
+ 
+ fit.joint.all.without.alpha<- dlm.multivariate(y = y.m, Ft = Ft4, Gt = Gt4, nit = 30000, bn = 10000, thin = 1,
+                                                v0 = v04, s0 = s04, m0 = m04, C0 = C04, delta = deltaJ5noalpha, V = V5)
+ 
+ 
+ qxaux <- qx_fitted(fit.joint.all.without.alpha)
+ 
+ qx_list <- setNames(
+   lapply(qxaux, function(q){
+     df <- as.data.frame(q)
+     df$age <- age
+     df
+   }),
+   c("Rio Negro","Japurá","Manaus")
+ )
+ 
+ # Data frame final
+ qx.all <- bind_rows(qx_list, .id = "regiao")
+ qx.all
+ 
+ 
+ 
+ 
+ ### compute metrics
+ mx.fit.without.alpha<- data.frame(qx.all$qx.fitted[qx.all$regiao=="Rio Negro"],
+                                   qx.all$qx.fitted[qx.all$regiao=="Japurá"],
+                                   qx.all$qx.fitted[qx.all$regiao=="Manaus"])
+ mx.fit.without.alpha<- as.data.frame(mx.fit.without.alpha)
+ 
+ ### model comparison
+ 
+ #LPPD
+ ls.univariate <- log_pred_density(y.m, fit.joint.all.univariate$mu,fit.joint.all.univariate$V)
+ ls.multivariate <- log_pred_density(y.m, fit.joint.all.without.alpha$mu,fit.joint.all.without.alpha$V)
+ ls.multivariateWithAlpha <- log_pred_density(y.m,fit.region.all$mu, fit.region.all$V)
+ 
+ 
+ data.frame(
+   model = c("model 1",
+             "model 2",
+             "model 3"),
+   logscore = round(c(ls.univariate, ls.multivariate, ls.multivariateWithAlpha),3)
+ )
+
+ 
+ ### weigthed metrics
+ ExM. <- extract_var(data = df.agregado,var = "Ex",regions = c("RIO NEGRO","JAPURA", "MANAUS"),sex = "Male")
+ mxM. <- extract_var(data = df.agregado,var = "mx",regions = c("RIO NEGRO","JAPURA", "MANAUS"),sex = "Male")
+ 
+ Ex.all<- data.frame(ExM.$`RIO NEGRO`, ExM.$JAPURA,ExM.$MANAUS)
+ mx.all<- data.frame(mxM.$`RIO NEGRO`, mxM.$JAPURA, mxM.$MANAUS)
+ 
+ 
+ multivariate.with.alpha<-weighted_metrics(
+   obs  = log(mx.all),
+   fit  = log(mx.fit.multivariateWithAlpha),
+   expo = Ex.all
+ )
+ multivariate.with.alpha> multivariate.with.alpha
+
+ 
+ multivariate.without.alpha<-
+   weighted_metrics(
+     obs  = log(mx.all),
+     fit  = log(mx.fit.without.alpha),
+     expo = Ex.all
+   )
+
+ 
+ multivariate.without.alpha
+ 
+ univariate<-weighted_metrics(
+   obs  = log(mx.all),
+   fit  = log(mx.fit.univariate),
+   expo = Ex.all
+ )
+ 
+ univariate
+
+ 
+ 
+ 
+ 
+ 
+ 
